@@ -274,6 +274,11 @@ local function renumber(workspace, id)
   local old = workspace.id
   hl.dispatch(hl.dsp.workspace.change_id({ workspace = tostring(old), id = id }))
 
+  -- Its layout goes with it too; see workspace-modes.
+  if o.workspace_renumbered then
+    o.workspace_renumbered(old, id)
+  end
+
   -- A record left under the new id belonged to a workspace that has gone.
   if merged[old] or merged[id] then
     merged[id] = merged[old]

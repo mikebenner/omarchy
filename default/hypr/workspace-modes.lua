@@ -24,6 +24,8 @@ local OPENED_TAG = "omarchy-mode-opened"
 local OPEN_RULE = "omarchy-floating-open-"
 local LAST_WORKSPACE = 2147483647
 local TITLEBARS = "/usr/lib/omarchy-hyprland-titlebars/titlebars.so"
+-- Where omarchy-hyprland-workspace-layout-toggle saves each workspace's mode.
+local MODES_DIR = paths.state_home .. "/omarchy/workspace-layouts"
 
 local M = {}
 
@@ -406,6 +408,49 @@ function o.workspace_mode(spec)
   end
 
   arrange(hl.get_workspace_windows(workspace))
+  sync_open_rules()
+  update_input()
+end
+
+-- monitor-workspaces gives a workspace another number when it moves it into
+-- another monitor's block. The mode belongs to the workspace, so it goes along:
+-- left under the old number it would come back on whatever workspace opens there
+-- next, and the new number could still hold the mode of a workspace that had it
+-- before, whose layout Hyprland applies as the id changes.
+function o.workspace_renumbered(old, new)
+  old, new = tostring(old), tostring(new)
+
+  local mode = modes[old]
+  modes[old] = nil
+  modes[new] = mode
+
+  -- The old number follows the default again, and the new one takes the
+  -- workspace's own layout, or the default under a floating one, rather than
+  -- the layout of the workspace that had the number before.
+  local tiled = hl.get_config("general.layout")
+  hl.workspace_rule({ workspace = old, layout = tiled })
+  hl.workspace_rule({ workspace = new, layout = mode ~= "floating" and mode or tiled })
+
+  -- The saved mode moves too, so the next session restores it under the number
+  -- the workspace has now. A file already under that number belonged to a
+  -- workspace that has gone.
+  local saved = io.open(MODES_DIR .. "/" .. old .. ".lua", "r")
+  local content = saved and saved:read("a")
+  if saved then
+    saved:close()
+  end
+
+  os.remove(MODES_DIR .. "/" .. new .. ".lua")
+
+  if content then
+    local file = io.open(MODES_DIR .. "/" .. new .. ".lua", "w")
+    if file then
+      file:write((content:gsub('workspace = "' .. old .. '"', 'workspace = "' .. new .. '"')))
+      file:close()
+      os.remove(MODES_DIR .. "/" .. old .. ".lua")
+    end
+  end
+
   sync_open_rules()
   update_input()
 end
